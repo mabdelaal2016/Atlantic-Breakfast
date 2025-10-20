@@ -1,15 +1,59 @@
-# Atlantic Breakfast — Online APK Build
+name: Build APK (Online)
 
-Upload these files to your GitHub repo root, then run the action:
+on:
+  workflow_dispatch:
 
-- `.github/workflows/build.yml`
-- `lib/main.dart`
-- `assets/logo.png`
-- `pubspec.yaml`
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
 
-**Run:** Actions → **Build APK (Online)** → Run workflow  
-**Download:** Artifact `atlantic_breakfast_release_apk` → `app-release.apk`
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-The workflow creates a fresh Flutter project (`--org com.atlantic`, package `com.atlantic.breakfast`), injects your app code, sets the label to **Atlantic Breakfast**, builds a release APK, and uploads it.
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-Admin: `admin / 123456` — InstaPay: `01272716001` — Arabic default + English switch.
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.2'
+
+      - name: Create Flutter project (com.atlantic.breakfast)
+        run: |
+          flutter create --org com.atlantic breakfast
+          echo "Project created."
+
+      - name: Replace lib/assets/pubspec with your app
+        run: |
+          rm -rf breakfast/lib
+          mkdir -p breakfast/lib
+          cp -r lib/* breakfast/lib/
+          mkdir -p breakfast/assets
+          cp -r assets/* breakfast/assets/
+          cp pubspec.yaml breakfast/pubspec.yaml
+
+      - name: Set app label to 'Atlantic Breakfast'
+        run: |
+          APP_NAME="Atlantic Breakfast"
+          STRINGS="breakfast/android/app/src/main/res/values/strings.xml"
+          if [ -f "$STRINGS" ]; then
+            sed -i "s#<string name=\\\"app_name\\\">.*</string>#<string name=\\\"app_name\\\">${APP_NAME}</string>#g" "$STRINGS"
+          fi
+
+      - name: Flutter Pub Get
+        working-directory: breakfast
+        run: flutter pub get
+
+      - name: Build APK (release)
+        working-directory: breakfast
+        run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlantic_breakfast_release_apk
+          path: breakfast/build/app/outputs/flutter-apk/app-release.apk
