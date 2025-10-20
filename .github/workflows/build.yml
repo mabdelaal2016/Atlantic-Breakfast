@@ -22,14 +22,48 @@ jobs:
         with:
           flutter-version: '3.22.2'
 
+      # 1) أنشئ مشروع Flutter كامل (Android + iOS) بالـ package المطلوب
+      - name: Create fresh Flutter project
+        run: |
+          rm -rf buildtmp
+          mkdir -p buildtmp
+          cd buildtmp
+          flutter create \
+            --platforms=android,ios \
+            --org com.atlantic \
+            --project-name breakfast \
+            breakfast
+          echo "Project skeleton created."
+
+      # 2) انسخ كودك (lib/assets/pubspec.yaml) داخل المشروع الجديد
+      - name: Inject your app code
+        run: |
+          rsync -a --delete lib/ buildtmp/breakfast/lib/
+          mkdir -p buildtmp/breakfast/assets
+          rsync -a assets/ buildtmp/breakfast/assets/
+          cp pubspec.yaml buildtmp/breakfast/pubspec.yaml
+
+      # 3) تأكيد اسم التطبيق (اختياري)
+      - name: Set app label
+        run: |
+          APP_NAME="Atlantic Breakfast"
+          STRINGS="buildtmp/breakfast/android/app/src/main/res/values/strings.xml"
+          if [ -f "$STRINGS" ]; then
+            sed -i "s#<string name=\"app_name\">.*</string>#<string name=\"app_name\">${APP_NAME}</string>#g" "$STRINGS"
+          fi
+
+      # 4) جلب الحزم وبناء APK
       - name: Flutter Pub Get
+        working-directory: buildtmp/breakfast
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build APK (release)
+        working-directory: buildtmp/breakfast
         run: flutter build apk --release
 
-      - name: Upload APK
+      # 5) رفع الـ APK كنتيجة
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: buildtmp/breakfast/build/app/outputs/flutter-apk/app-release.apk
