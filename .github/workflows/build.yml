@@ -1,35 +1,82 @@
-name: Build APK (Online)
+name: Build APK + Full Project (Online)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-apk-and-export-project:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Setup Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.22.2'
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.2'
 
-    - name: Flutter Pub Get
-      run: flutter pub get
+      # 1) أنشئ مشروع Flutter كامل (Android + iOS) بالباكيج المطلوب
+      - name: Create fresh Flutter project
+        run: |
+          rm -rf buildtmp
+          mkdir -p buildtmp
+          cd buildtmp
+          flutter create \
+            --platforms=android,ios \
+            --org com.atlantic \
+            --project-name breakfast \
+            breakfast
+          echo "Project skeleton created."
 
-    - name: Build APK (release)
-      run: flutter build apk --release lib/main.dart
+      # 2) حقن كودك و الأصول و pubspec داخل المشروع الجديد
+      - name: Inject your code (lib/assets/pubspec)
+        run: |
+          rsync -a --delete lib/ buildtmp/breakfast/lib/
+          mkdir -p buildtmp/breakfast/assets
+          rsync -a assets/ buildtmp/breakfast/assets/ || true
+          cp pubspec.yaml buildtmp/breakfast/pubspec.yaml
 
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-release
-        path: build/app/outputs/flutter-apk/app-release.apk
+      # 3) ضبط اسم التطبيق
+      - name: Set app label
+        run: |
+          APP_NAME="Atlantic Breakfast"
+          STRINGS="buildtmp/breakfast/android/app/src/main/res/values/strings.xml"
+          if [ -f "$STRINGS" ]; then
+            sed -i "s#<string name=\\\"app_name\\\">.*</string>#<string name=\\\"app_name\\\">${APP_NAME}</string>#g" "$STRINGS"
+          fi
+
+      # 4) جلب الحزم وبناء APK
+      - name: Flutter Pub Get
+        working-directory: buildtmp/breakfast
+        run: flutter pub get
+
+      - name: Build APK (release)
+        working-directory: buildtmp/breakfast
+        run: flutter build apk --release -t lib/main.dart
+
+      # 5) رفع الـ APK
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AtlanticBreakfast-APK
+          path: buildtmp/breakfast/build/app/outputs/flutter-apk/app-release.apk
+
+      # 6) ضغط المشروع الكامل (Android + iOS + lib + pubspec) ورفعه كـ ZIP
+      - name: Zip full project
+        run: |
+          cd buildtmp
+          zip -r ../AtlanticBreakfast_full_project.zip breakfast
+          cd ..
+
+      - name: Upload full project ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: AtlanticBreakfast-FullProject
+          path: AtlanticBreakfast_full_project.zip
