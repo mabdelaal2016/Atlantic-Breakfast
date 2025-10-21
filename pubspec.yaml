@@ -1,0 +1,11 @@
+
+name: atlantic_breakfast
+description: A new Flutter project
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Add any additional dependencies below
+  firebase_core: ^1.0.0
+    
